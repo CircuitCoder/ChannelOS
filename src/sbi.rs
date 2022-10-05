@@ -17,8 +17,6 @@ impl SPIFunc {
 
 fn send(func: SPIFunc, mut param0: usize, mut param1: usize) -> Result<usize, usize> {
     let (eid, fid) = func.id();
-    let mut err: usize;
-    let mut val : usize;
     unsafe {
         core::arch::asm!(
             "ecall",
@@ -37,5 +35,9 @@ fn send(func: SPIFunc, mut param0: usize, mut param1: usize) -> Result<usize, us
 }
 
 pub fn console_putchar(c: u8) {
-    send(SPIFunc::ConsolePutchar, c as usize, 0);
+    send(SPIFunc::ConsolePutchar, c as usize, 0).unwrap();
+}
+
+pub fn set_timer(timer: usize) {
+    send(SPIFunc::SetTimer, timer as usize, 0).unwrap();
 }

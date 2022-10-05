@@ -84,36 +84,10 @@ impl UART16550 {
 
 static mut SERIAL: UART16550 = UART16550::new(0x10000000, 0, 11_059_200, 115200);
 
-mod locking {
-    use core::sync::atomic::*;
-    #[link_section = ".sdata"]
-    pub static READ: AtomicBool = AtomicBool::new(false);
-    #[link_section = ".sdata"]
-    pub static WRITE: AtomicBool = AtomicBool::new(false);
-}
-
 pub fn putc(c: u8) {
-    while locking::WRITE.compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Acquire).is_err() {
-        hint::spin_loop();
-    }
-
     unsafe {
         SERIAL.putchar(c);
     }
-
-    locking::WRITE.store(false, Ordering::Release);
-}
-
-pub fn getc() -> u8 {
-    while locking::READ.compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Acquire).is_err() {
-        hint::spin_loop();
-    }
-
-    let ret = unsafe { SERIAL.getchar() };
-
-    locking::READ.store(false, Ordering::Release);
-
-    ret
 }
 
 pub fn print(s: &str) {

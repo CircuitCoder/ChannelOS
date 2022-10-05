@@ -7,6 +7,7 @@ mod sbi;
 mod serial;
 mod lang_items;
 mod trap;
+mod timer;
 
 extern "C" {
     fn _fw_start();
@@ -20,5 +21,10 @@ fn boot(hartid: usize, fdt_addr: usize) {
     serial::early_serial_init();
     serial::sbi_print("Test SBI\n");
     mprintln!("Hello world!").unwrap();
-    loop { }
+
+    trap::init();
+    timer::init();
+    loop {
+        crate::trap::wfi();
+    }
 }
