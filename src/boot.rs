@@ -4,6 +4,12 @@ macro_rules! clear_reg {
     };
 }
 
+const INIT_STACK_SIZE: usize = 128 * 1024;
+
+#[link_section = ".data"]
+#[no_mangle]
+static INIT_STACK: [u8; INIT_STACK_SIZE] = [0; INIT_STACK_SIZE];
+
 #[no_mangle]
 #[link_section = ".text.entry"]
 #[naked]
@@ -46,10 +52,13 @@ pub unsafe extern "C" fn entry() -> ! {
         clear_reg!(t6),
 
         // Setup stack
-        "li sp, 0x80400000",
+        "la sp, INIT_STACK",
+        "li t0, {}",
+        "add sp, sp, t0",
 
         // Jump to boot
         "j boot",
+        const INIT_STACK_SIZE,
         options(noreturn),
     )
 }

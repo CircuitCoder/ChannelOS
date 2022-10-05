@@ -1,4 +1,4 @@
-#![feature(naked_functions)]
+#![feature(naked_functions, asm_const)]
 #![cfg_attr(not(test), no_std)]
 #![no_main]
 
@@ -17,6 +17,6 @@ extern "C" {
 #[no_mangle]
 fn boot(hartid: usize, fdt_addr: usize) {
     serial::early_serial_init();
-    mprintln!("Hello world!");
+    mprintln!("Hello world!").unwrap();
     loop { }
 }
