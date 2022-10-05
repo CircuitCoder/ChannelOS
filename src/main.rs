@@ -1,11 +1,12 @@
 #![feature(naked_functions, asm_const)]
-#![cfg_attr(not(test), no_std)]
+#![no_std]
 #![no_main]
 
 mod boot;
 mod sbi;
 mod serial;
 mod lang_items;
+mod trap;
 
 extern "C" {
     fn _fw_start();
@@ -17,6 +18,7 @@ extern "C" {
 #[no_mangle]
 fn boot(hartid: usize, fdt_addr: usize) {
     serial::early_serial_init();
+    serial::sbi_print("Test SBI\n");
     mprintln!("Hello world!").unwrap();
     loop { }
 }

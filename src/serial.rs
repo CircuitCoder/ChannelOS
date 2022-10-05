@@ -155,3 +155,9 @@ pub fn early_serial_init() {
         SERIAL.init()
     }
 }
+
+pub fn sbi_print(s: &str) {
+    for c in s.as_bytes() {
+        crate::sbi::console_putchar(*c);
+    }
+}
