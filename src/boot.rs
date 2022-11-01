@@ -1,14 +1,11 @@
+use crate::consts::KERNEL_STACK_SIZE;
+use crate::trap::TrapFrame;
+
 macro_rules! clear_reg {
     ($x:ident) => {
         concat!("li ", stringify!($x), ", 0")
     };
 }
-
-const INIT_STACK_SIZE: usize = 128 * 1024;
-
-#[link_section = ".data"]
-#[no_mangle]
-static INIT_STACK: [u8; INIT_STACK_SIZE] = [0; INIT_STACK_SIZE];
 
 #[no_mangle]
 #[link_section = ".text.entry"]
@@ -58,7 +55,9 @@ pub unsafe extern "C" fn entry() -> ! {
 
         // Jump to boot
         "j boot",
-        const INIT_STACK_SIZE,
+
+        // Reserve for one trap frame at the top
+        const KERNEL_STACK_SIZE - core::mem::size_of::<TrapFrame>(),
         options(noreturn),
     )
 }

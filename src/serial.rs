@@ -114,7 +114,7 @@ pub fn fprint(args: core::fmt::Arguments) -> core::fmt::Result {
 #[macro_export]
 macro_rules! mprint {
     ($($arg:tt)*) => ({
-        $crate::serial::fprint(format_args!($($arg)*))
+        $crate::serial::fprint(format_args!($($arg)*)).unwrap()
     });
 }
 

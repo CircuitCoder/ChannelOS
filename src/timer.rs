@@ -11,14 +11,12 @@ pub fn init() {
         sie::set_stimer();
     }
     rearm();
-    crate::mprintln!("Timer setup");
 }
 
 // TODO: Remove me
 pub fn rearm() {
     let next = rtc() + TIMEBASE;
     set_timer(next);
-    crate::mprintln!("Timer scheduled at {}", next).unwrap();
 }
 
 pub fn rtc() -> usize {
@@ -30,7 +28,7 @@ pub fn now() -> usize {
 }
 
 pub fn trigger() {
-    crate::mprintln!("Timer triggered at {} ({})", now(), rtc()).unwrap();
+    crate::mprintln!("Timer triggered at {} ({})", now(), rtc());
     rearm();
 
     // TODO: dispatch to scheduler

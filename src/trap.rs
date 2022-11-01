@@ -1,4 +1,4 @@
-use riscv::register::scause::{Scause, Trap, Interrupt};
+use riscv::register::scause::{Scause, Trap, Interrupt, self};
 use riscv::register::{sscratch, stvec, sstatus, sie};
 use riscv::register::sstatus::Sstatus;
 
@@ -12,6 +12,26 @@ pub struct TrapFrame {
     pub sepc: usize,      // Supervisor exception program counter
     pub stval: usize,     // Supervisor trap value
     pub scause: Scause,   // Scause register: record the cause of exception/interrupt/trap
+}
+
+impl TrapFrame {
+    pub fn with_process(is_user: bool, entry: usize, sp: usize) -> Self {
+        let mut sstatus = sstatus::read();
+
+        if is_user {
+            sstatus.set_spp(sstatus::SPP::User);
+        }
+
+        let mut result = Self {
+            x: [0; 32],
+            sstatus,
+            sepc: entry,
+            stval: 0,
+            scause: scause::read(),
+        };
+        result.x[2] = sp;
+        result
+    }
 }
 
 macro_rules! save_reg {
@@ -146,19 +166,16 @@ pub unsafe extern "C" fn trap_exit() -> ! {
 
 #[no_mangle]
 unsafe fn trap_impl(tf: *mut TrapFrame) {
-    mprintln!("Trap!").unwrap();
-
     let tf = &*tf;
     match tf.scause.cause() {
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
             crate::timer::trigger();
         }
         x => {
-            mprintln!("Unimplemented trap: {:?}", x).unwrap();
+            mprintln!("Unimplemented trap: {:?} at {:#x}, tval = {:#x}", x, tf.sepc, tf.stval);
+            loop {}
         }
     }
-
-    crate::mprintln!("Return to {:x}", tf.sepc).unwrap();
 }
 
 pub fn init() {
