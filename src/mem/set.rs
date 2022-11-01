@@ -1,11 +1,15 @@
-use core::ops::{RangeBounds, Range};
+use core::ops::{Range, RangeBounds};
 
 use alloc::{collections::BTreeMap, vec::Vec};
 use elf_rs::ElfFile;
 
 use crate::consts::PHYS_MEMORY_END;
 
-use super::{Frame, addr::{VirtPageNum, VirtAddr, PhysPageNum}, paging::{PageTable, PTEFlags}};
+use super::{
+    addr::{PhysPageNum, VirtAddr, VirtPageNum},
+    paging::{PTEFlags, PageTable},
+    Frame,
+};
 
 bitflags::bitflags! {
     pub struct MapPermission: u8 {
@@ -87,14 +91,21 @@ impl MemorySet {
     /// Assume that no conflicts.
     pub fn insert_framed_area(
         &mut self,
-        start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission
+        start_va: VirtAddr,
+        end_va: VirtAddr,
+        permission: MapPermission,
     ) {
-        self.push(MapArea::new(
-            start_va,
-            end_va,
-            MapTarget::Framed { frames: BTreeMap::new() },
-            permission,
-        ), None);
+        self.push(
+            MapArea::new(
+                start_va,
+                end_va,
+                MapTarget::Framed {
+                    frames: BTreeMap::new(),
+                },
+                permission,
+            ),
+            None,
+        );
     }
 
     pub fn new_kernel() -> Self {
@@ -113,45 +124,72 @@ impl MemorySet {
         }
 
         // map kernel sections
-        crate::mprintln!(".text [{:#x}, {:#x})", _text_start as usize, _text_end as usize);
-        crate::mprintln!(".rodata [{:#x}, {:#x})", _ro_start as usize, _ro_end as usize);
-        crate::mprintln!(".data + .bss [{:#x}, {:#x})", _rw_start as usize, _rw_end as usize);
+        crate::mprintln!(
+            ".text [{:#x}, {:#x})",
+            _text_start as usize,
+            _text_end as usize
+        );
+        crate::mprintln!(
+            ".rodata [{:#x}, {:#x})",
+            _ro_start as usize,
+            _ro_end as usize
+        );
+        crate::mprintln!(
+            ".data + .bss [{:#x}, {:#x})",
+            _rw_start as usize,
+            _rw_end as usize
+        );
         crate::mprintln!("mapping .text section");
-        memory_set.push(MapArea::new(
-            (_text_start as usize).into(),
-            (_text_end as usize).into(),
-            MapTarget::Identical,
-            MapPermission::R | MapPermission::X,
-        ), None);
+        memory_set.push(
+            MapArea::new(
+                (_text_start as usize).into(),
+                (_text_end as usize).into(),
+                MapTarget::Identical,
+                MapPermission::R | MapPermission::X,
+            ),
+            None,
+        );
         crate::mprintln!("mapping .rodata section");
-        memory_set.push(MapArea::new(
-            (_ro_start as usize).into(),
-            (_ro_end as usize).into(),
-            MapTarget::Identical,
-            MapPermission::R,
-        ), None);
+        memory_set.push(
+            MapArea::new(
+                (_ro_start as usize).into(),
+                (_ro_end as usize).into(),
+                MapTarget::Identical,
+                MapPermission::R,
+            ),
+            None,
+        );
         crate::mprintln!("mapping .bss + .data section");
-        memory_set.push(MapArea::new(
-            (_rw_start as usize).into(),
-            (_rw_end as usize).into(),
-            MapTarget::Identical,
-            MapPermission::R | MapPermission::W,
-        ), None);
+        memory_set.push(
+            MapArea::new(
+                (_rw_start as usize).into(),
+                (_rw_end as usize).into(),
+                MapTarget::Identical,
+                MapPermission::R | MapPermission::W,
+            ),
+            None,
+        );
         crate::mprintln!("mapping physical memory");
-        memory_set.push(MapArea::new(
-            (_kernel_end as usize).into(),
-            PHYS_MEMORY_END.into(),
-            MapTarget::Identical,
-            MapPermission::R | MapPermission::W,
-        ), None);
+        memory_set.push(
+            MapArea::new(
+                (_kernel_end as usize).into(),
+                PHYS_MEMORY_END.into(),
+                MapTarget::Identical,
+                MapPermission::R | MapPermission::W,
+            ),
+            None,
+        );
 
         crate::mprintln!("Mapping serial port");
-        memory_set.push(MapArea::new(
-            0x10000000.into(),
-            0x10001000.into(),
-            MapTarget::Identical,
-            MapPermission::R | MapPermission::W,
-        ), None);
+        memory_set.push(
+            MapArea::new(
+                0x10000000.into(),
+                0x10001000.into(),
+                MapTarget::Identical,
+                MapPermission::R | MapPermission::W,
+            ),
+            None,
+        );
 
         memory_set
     }
@@ -167,13 +205,12 @@ impl MemorySet {
     }
 }
 
-
 impl MapArea {
     pub fn new(
         start_va: VirtAddr,
         end_va: VirtAddr,
         target: MapTarget,
-        perm: MapPermission
+        perm: MapPermission,
     ) -> Self {
         let start_vpn: VirtPageNum = start_va.floor();
         let end_vpn: VirtPageNum = end_va.ceil();
@@ -216,9 +253,7 @@ impl MapArea {
                 frames.insert(vpn, frame);
                 ppn
             }
-            MapTarget::Remote { ref remote } => {
-                remote.get(&vpn).unwrap().clone()
-            }
+            MapTarget::Remote { ref remote } => remote.get(&vpn).unwrap().clone(),
         };
 
         let pte_flags = PTEFlags::from_bits(self.perm.bits).unwrap();

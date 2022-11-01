@@ -1,5 +1,5 @@
-use core::ops::Range;
 use alloc::collections::BTreeMap;
+use core::ops::Range;
 use enum_repr::EnumRepr;
 
 use crate::mprintln;
@@ -60,22 +60,38 @@ struct DynEnt {
 impl<'a> Dynamic<'a> {
     pub fn parse(elf: &'a [u8], dynamic: Range<usize>) -> Self {
         let (_, dynamic_region, _) = unsafe { elf[dynamic].align_to::<DynEnt>() };
-        let collected: BTreeMap<DynTag, usize> = dynamic_region.iter().take_while(|e| e.tag != 0)
+        let collected: BTreeMap<DynTag, usize> = dynamic_region
+            .iter()
+            .take_while(|e| e.tag != 0)
             .filter_map(|e| DynTag::from_repr(e.tag).map(|tag| (tag, e.val)))
             .collect();
         mprintln!("{:#?}", collected);
 
-        let mut result = Self { rel: None, dynsym: None, dynstr: None };
+        let mut result = Self {
+            rel: None,
+            dynsym: None,
+            dynstr: None,
+        };
         if let Some(addr) = collected.get(&DynTag::DT_RELA) {
             let sz = collected.get(&DynTag::DT_RELASZ).unwrap();
             let ent = collected.get(&DynTag::DT_RELAENT).unwrap();
             mprintln!("Rela: base {:#x}, sz {:#x}, ent {:#x}", addr, sz, ent);
-            let rela = unsafe { core::slice::from_raw_parts(&elf[*addr] as *const u8 as *const Elf64RELA, *sz / *ent) };
+            let rela = unsafe {
+                core::slice::from_raw_parts(
+                    &elf[*addr] as *const u8 as *const Elf64RELA,
+                    *sz / *ent,
+                )
+            };
             result.rel = Some(RelTable::RELA(rela));
         }
 
         if let Some(addr) = collected.get(&DynTag::DT_SYMTAB) {
-            result.dynsym = Some(unsafe { core::slice::from_raw_parts(&elf[*addr] as *const u8 as *const Sym, (elf.len() - addr) / core::mem::size_of::<Sym>()) });
+            result.dynsym = Some(unsafe {
+                core::slice::from_raw_parts(
+                    &elf[*addr] as *const u8 as *const Sym,
+                    (elf.len() - addr) / core::mem::size_of::<Sym>(),
+                )
+            });
         }
 
         if let Some(addr) = collected.get(&DynTag::DT_STRTAB) {

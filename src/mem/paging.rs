@@ -1,5 +1,5 @@
-use alloc::vec::Vec;
 use alloc::vec;
+use alloc::vec::Vec;
 
 use crate::consts::PAGE_SIZE;
 
@@ -31,9 +31,7 @@ impl PTE {
         }
     }
     pub fn empty() -> Self {
-        PTE {
-            bits: 0,
-        }
+        PTE { bits: 0 }
     }
     pub fn ppn(&self) -> PhysPageNum {
         (self.bits >> 10 & ((1usize << 44) - 1)).into()
@@ -60,9 +58,7 @@ impl PageTable {
         let ppn = frame.ppn();
         let frames = vec![frame];
 
-        PageTable {
-            ppn, frames
-        }
+        PageTable { ppn, frames }
     }
 
     pub fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) {

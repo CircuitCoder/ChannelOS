@@ -29,7 +29,12 @@ mod masks {
 
 impl UART16550 {
     pub const fn new(base: usize, shift: usize, clk: u64, baud: u64) -> Self {
-        Self { base, shift, clk, baud }
+        Self {
+            base,
+            shift,
+            clk,
+            baud,
+        }
     }
 
     pub fn init(&self) {
@@ -39,15 +44,19 @@ impl UART16550 {
             let latch = self.clk / (16 * self.baud);
             core::ptr::write_volatile(
                 (self.base + (offsets::DLL << self.shift)) as *mut u8,
-                latch as u8
+                latch as u8,
             );
-            core::ptr::write_volatile((self.base + (offsets::DLH << self.shift)) as *mut u8, (latch >> 8) as u8);
+            core::ptr::write_volatile(
+                (self.base + (offsets::DLH << self.shift)) as *mut u8,
+                (latch >> 8) as u8,
+            );
 
             core::ptr::write_volatile((self.base + (offsets::LCR << self.shift)) as *mut u8, 3); // WLEN8 & !DLAB
 
             core::ptr::write_volatile((self.base + (offsets::MCR << self.shift)) as *mut u8, 0);
             core::ptr::write_volatile((self.base + (offsets::IER << self.shift)) as *mut u8, 0);
-            core::ptr::write_volatile((self.base + (offsets::FCR << self.shift)) as *mut u8, 0x7); // FIFO enable + FIFO reset
+            core::ptr::write_volatile((self.base + (offsets::FCR << self.shift)) as *mut u8, 0x7);
+            // FIFO enable + FIFO reset
 
             // No interrupt for now
         }
@@ -58,7 +67,8 @@ impl UART16550 {
             core::ptr::write_volatile((self.base + (offsets::THR << self.shift)) as *mut u8, c);
 
             loop {
-                if core::ptr::read_volatile((self.base + (offsets::LSR << self.shift)) as *const u8) & masks::THRE
+                if core::ptr::read_volatile((self.base + (offsets::LSR << self.shift)) as *const u8)
+                    & masks::THRE
                     != 0
                 {
                     break;
@@ -70,7 +80,8 @@ impl UART16550 {
     pub fn getchar(&self) -> u8 {
         unsafe {
             loop {
-                if core::ptr::read_volatile((self.base + (offsets::LSR << self.shift)) as *const u8) & masks::DR
+                if core::ptr::read_volatile((self.base + (offsets::LSR << self.shift)) as *const u8)
+                    & masks::DR
                     != 0
                 {
                     break;
@@ -125,9 +136,7 @@ macro_rules! mprintln {
 }
 
 pub fn early_serial_init() {
-    unsafe {
-        SERIAL.init()
-    }
+    unsafe { SERIAL.init() }
 }
 
 pub fn sbi_print(s: &str) {

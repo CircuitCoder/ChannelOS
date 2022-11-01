@@ -4,18 +4,18 @@
 
 extern crate alloc;
 
-mod consts;
 mod boot;
-mod sbi;
-mod serial;
+mod consts;
+mod elf;
 mod lang_items;
-mod trap;
-mod timer;
 mod mem;
 mod process;
-mod elf;
 mod provided;
+mod sbi;
 mod sched;
+mod serial;
+mod timer;
+mod trap;
 
 #[link_section = ".data"]
 #[no_mangle]

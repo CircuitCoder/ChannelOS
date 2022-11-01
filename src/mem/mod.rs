@@ -1,8 +1,8 @@
 use alloc::collections::VecDeque;
 use buddy_system_allocator::LockedHeap;
 
-use riscv::register::sstatus;
 use crate::consts::*;
+use riscv::register::sstatus;
 
 use self::{addr::PhysPageNum, set::MemorySet};
 
@@ -59,7 +59,8 @@ impl NaiveFrameAllocator {
     }
 }
 
-static FRAME_ALLOC: spin::Mutex<NaiveFrameAllocator> = spin::Mutex::new(NaiveFrameAllocator::Uninit);
+static FRAME_ALLOC: spin::Mutex<NaiveFrameAllocator> =
+    spin::Mutex::new(NaiveFrameAllocator::Uninit);
 
 fn init_frame() {
     let mut lock = FRAME_ALLOC.lock();
@@ -73,7 +74,10 @@ impl Frame {
     pub fn alloc() -> Self {
         match *FRAME_ALLOC.lock() {
             NaiveFrameAllocator::Uninit => panic!("Frame allocated before init"),
-            NaiveFrameAllocator::Init { ref mut freelist, ref mut ptr } => {
+            NaiveFrameAllocator::Init {
+                ref mut freelist,
+                ref mut ptr,
+            } => {
                 if let Some(p) = freelist.pop_front() {
                     return Self(p);
                 }
@@ -81,7 +85,7 @@ impl Frame {
                 let alloc = *ptr;
                 *ptr += 1;
                 return Self(alloc);
-            },
+            }
         }
     }
 
@@ -94,9 +98,11 @@ impl Drop for Frame {
     fn drop(&mut self) {
         match *FRAME_ALLOC.lock() {
             NaiveFrameAllocator::Uninit => panic!("Frame de-allocated before init"),
-            NaiveFrameAllocator::Init { ref mut freelist, .. } => {
+            NaiveFrameAllocator::Init {
+                ref mut freelist, ..
+            } => {
                 freelist.push_front(self.0);
-            },
+            }
         }
     }
 }

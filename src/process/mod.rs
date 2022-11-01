@@ -1,6 +1,16 @@
 use elf_rs::{ElfFile, SectionHeaderFlags, SectionType};
 
-use crate::{mem::{set::{MemorySet, MapArea, MapPermission}, addr::{VirtAddr, VirtPageNum, PhysAddr}}, consts::{USER_STACK_TOP, KERNEL_STACK_SIZE, VDSO_RESIDE}, trap::TrapFrame, mprintln, elf::Dynamic, provided::kernel_meow};
+use crate::{
+    consts::{KERNEL_STACK_SIZE, USER_STACK_TOP, VDSO_RESIDE},
+    elf::Dynamic,
+    mem::{
+        addr::{PhysAddr, VirtAddr, VirtPageNum},
+        set::{MapArea, MapPermission, MemorySet},
+    },
+    mprintln,
+    provided::kernel_meow,
+    trap::TrapFrame,
+};
 
 pub static TEST_PROGRAM: &'static [u8] = include_bytes!("../../user/test.elf");
 
@@ -29,7 +39,10 @@ impl Process {
         // Allocate memories
         for sec_hdr in parsed.section_header_iter() {
             if sec_hdr.section_name().starts_with(b".dynamic") {
-                dynamic = Some(Dynamic::parse(elf, sec_hdr.offset() as usize .. (sec_hdr.offset()  + sec_hdr.size()) as usize));
+                dynamic = Some(Dynamic::parse(
+                    elf,
+                    sec_hdr.offset() as usize..(sec_hdr.offset() + sec_hdr.size()) as usize,
+                ));
             }
 
             if !sec_hdr.flags().contains(SectionHeaderFlags::SHF_ALLOC) {
@@ -61,7 +74,7 @@ impl Process {
             }
             mprintln!("Perm: {:?}", perm);
 
-            let area = MapArea::frames(virt_start.into() .. virt_end.into(), perm);
+            let area = MapArea::frames(virt_start.into()..virt_end.into(), perm);
             mset.push(area, src);
         }
 
@@ -73,7 +86,11 @@ impl Process {
         let text_vdso_start_ppn = PhysAddr(_text_vdso_start as usize).floor();
         let text_vdso_end_ppn = PhysAddr(_text_vdso_end as usize).ceil();
         let text_vdso_start_vpn = VirtAddr(VDSO_RESIDE).floor();
-        let text_vdso_area = MapArea::linear(text_vdso_start_ppn..text_vdso_end_ppn, text_vdso_start_vpn, MapPermission::U | MapPermission::R | MapPermission::X);
+        let text_vdso_area = MapArea::linear(
+            text_vdso_start_ppn..text_vdso_end_ppn,
+            text_vdso_start_vpn,
+            MapPermission::U | MapPermission::R | MapPermission::X,
+        );
         mset.push(text_vdso_area, None);
 
         if let Some(dynamic) = &dynamic {
@@ -95,13 +112,14 @@ impl Process {
                                     let target_offset = target_at - _text_vdso_start as usize;
                                     let target_vaddr = VDSO_RESIDE + target_offset;
                                     let got_vaddr = ent.offset;
-                                    let got_paddr = mset.table.translate_addr(got_vaddr.into()).unwrap();
+                                    let got_paddr =
+                                        mset.table.translate_addr(got_vaddr.into()).unwrap();
                                     mprintln!("Wring to GOT paddr {:#x}", got_paddr.0);
                                     unsafe { (got_paddr.0 as *mut usize).write(target_vaddr) };
                                 }
                             }
                         }
-                    },
+                    }
                     crate::elf::RelTable::REL(_) => todo!(),
                 }
             }
@@ -114,17 +132,17 @@ impl Process {
         // TODO: extendable stack
         let stack_end = VirtAddr(USER_STACK_TOP).ceil();
         let stack_start = VirtPageNum(stack_end.0 - 16usize);
-        let stack_area = MapArea::frames(stack_start .. stack_end, MapPermission::U | MapPermission::W | MapPermission::R);
+        let stack_area = MapArea::frames(
+            stack_start..stack_end,
+            MapPermission::U | MapPermission::W | MapPermission::R,
+        );
         mset.push(stack_area, None);
 
         let entry = parsed.entry_point() as usize;
         mprintln!("Entry: {:#x}", entry);
         let tf = TrapFrame::with_process(true, entry, USER_STACK_TOP);
 
-        let process = Process {
-            tf,
-            mset,
-        };
+        let process = Process { tf, mset };
 
         process
     }

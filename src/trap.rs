@@ -1,6 +1,6 @@
-use riscv::register::scause::{Scause, Trap, Interrupt, self};
-use riscv::register::{sscratch, stvec, sstatus, sie};
+use riscv::register::scause::{self, Interrupt, Scause, Trap};
 use riscv::register::sstatus::Sstatus;
+use riscv::register::{sie, sscratch, sstatus, stvec};
 
 use crate::mprintln;
 
@@ -36,16 +36,15 @@ impl TrapFrame {
 
 macro_rules! save_reg {
     ($x:ident, $shift:literal) => {
-        concat!("sd ", stringify!($x), ", ", stringify!($shift * 8),"(sp)")
+        concat!("sd ", stringify!($x), ", ", stringify!($shift * 8), "(sp)")
     };
 }
 
 macro_rules! restore_reg {
     ($x:ident, $shift:literal) => {
-        concat!("ld ", stringify!($x), ", ", stringify!($shift * 8),"(sp)")
+        concat!("ld ", stringify!($x), ", ", stringify!($shift * 8), "(sp)")
     };
 }
-
 
 #[no_mangle]
 #[naked]
@@ -172,7 +171,12 @@ unsafe fn trap_impl(tf: *mut TrapFrame) {
             crate::timer::trigger();
         }
         x => {
-            mprintln!("Unimplemented trap: {:?} at {:#x}, tval = {:#x}", x, tf.sepc, tf.stval);
+            mprintln!(
+                "Unimplemented trap: {:?} at {:#x}, tval = {:#x}",
+                x,
+                tf.sepc,
+                tf.stval
+            );
             loop {}
         }
     }
