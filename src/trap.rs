@@ -1,8 +1,10 @@
-use riscv::register::scause::{self, Interrupt, Scause, Trap};
+use riscv::register::scause::{self, Exception, Interrupt, Scause, Trap};
 use riscv::register::sstatus::Sstatus;
 use riscv::register::{sie, sscratch, sstatus, stvec};
 
-use crate::mprintln;
+use crate::mem::addr::{PhysAddr, VirtAddr};
+use crate::mem::set::{MapArea, MapPermission};
+use crate::{mprintln, sched, service, uprint};
 
 #[repr(C)]
 #[derive(Clone)]
@@ -18,8 +20,11 @@ impl TrapFrame {
     pub fn with_process(is_user: bool, entry: usize, sp: usize) -> Self {
         let mut sstatus = sstatus::read();
 
+        sstatus.set_spie(true);
         if is_user {
             sstatus.set_spp(sstatus::SPP::User);
+        } else {
+            sstatus.set_spp(sstatus::SPP::Supervisor);
         }
 
         let mut result = Self {
@@ -52,10 +57,7 @@ pub unsafe extern "C" fn trap_entry() -> ! {
     core::arch::asm!(
         ".align 4",
         "csrrw sp, sscratch, sp",
-        "bnez sp, 0f", // from user
-        "csrr sp, sscratch",
 
-        "0:",
         "addi sp, sp, -{}",
         save_reg!(x1, 1),
         save_reg!(x3, 3),
@@ -115,13 +117,10 @@ pub unsafe extern "C" fn trap_exit() -> ! {
     core::arch::asm!(
         restore_reg!(s1, 32),
         restore_reg!(s2, 33),
-        "andi s0, s1, 1 << 8",
-        "bnez s0, 0f", // to kernel
 
         "addi s0, sp, {}",
         "csrw sscratch, s0",
 
-        "0:",
         "csrw sstatus, s1",
         "csrw sepc, s2",
 
@@ -165,21 +164,23 @@ pub unsafe extern "C" fn trap_exit() -> ! {
 
 #[no_mangle]
 unsafe fn trap_impl(tf: *mut TrapFrame) {
-    let tf = &*tf;
+    let tf = &mut *tf;
+    mprintln!("[Trap] enter <- {:#x}", tf.sepc);
     match tf.scause.cause() {
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
-            crate::timer::trigger();
+            crate::timer::tick(tf);
+        }
+        Trap::Exception(Exception::UserEnvCall) => {
+            syscall(tf);
         }
         x => {
-            mprintln!(
+            panic!(
                 "Unimplemented trap: {:?} at {:#x}, tval = {:#x}",
-                x,
-                tf.sepc,
-                tf.stval
+                x, tf.sepc, tf.stval
             );
-            loop {}
         }
     }
+    mprintln!("[Trap] exit -> {:#x}", tf.sepc);
 }
 
 pub fn init() {
@@ -187,7 +188,7 @@ pub fn init() {
         sscratch::write(0);
         stvec::write(trap_entry as usize, stvec::TrapMode::Direct);
 
-        sstatus::set_sie();
+        // sstatus::set_sie();
         sie::set_sext();
     }
 }
@@ -197,4 +198,45 @@ pub fn wfi() {
         sstatus::set_sie();
         riscv::asm::wfi();
     }
+}
+
+fn syscall(tf: &mut TrapFrame) {
+    mprintln!("[SyncSyscall] num: {}", tf.x[10]);
+    match tf.x[10] {
+        0x3 => {
+            let srv = tf.x[11];
+            mprintln!("[SyncSyscall] requesting service {}", srv);
+            if srv >= service::SERVICE_LIST.len() {
+                panic!("[SyncSyscall] invalid service {}", srv);
+            }
+
+            let (req, resp) = service::SERVICE_LIST[srv]();
+            let mut sch = sched::SCHEDULER.lock();
+            let proc = sch.running_process();
+            let req_area = MapArea::linear(
+                req.floor()..PhysAddr(req.0 + 1).ceil(),
+                VirtAddr(0x64000000).into(),
+                MapPermission::U | MapPermission::W | MapPermission::R,
+            );
+            let resp_area = MapArea::linear(
+                resp.floor()..PhysAddr(resp.0 + 1).ceil(),
+                VirtAddr(0x64001000).into(),
+                MapPermission::U | MapPermission::W | MapPermission::R,
+            );
+            proc.mset.push(req_area, None);
+            proc.mset.push(resp_area, None);
+            unsafe {
+                riscv::asm::sfence_vma_all();
+            }
+            tf.x[10] = 0x64000000;
+            tf.x[11] = 0x64001000;
+        }
+        0x100 => {
+            // Sync call putchar
+            uprint!("{}", tf.x[11] as u8 as char);
+        }
+        _ => {}
+    }
+
+    tf.sepc += 4;
 }

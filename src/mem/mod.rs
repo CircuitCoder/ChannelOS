@@ -19,7 +19,6 @@ pub fn init() {
     }
     init_heap();
     init_frame();
-    init_map();
 }
 
 fn init_heap() {
@@ -67,7 +66,7 @@ fn init_frame() {
     lock.init();
 }
 
-struct Frame(usize);
+pub struct Frame(usize);
 
 // TODO: OOM
 impl Frame {
@@ -105,12 +104,4 @@ impl Drop for Frame {
             }
         }
     }
-}
-
-lazy_static::lazy_static! {
-    static ref KERNEL_INIT_MAP: MemorySet = MemorySet::new_kernel();
-}
-
-fn init_map() {
-    KERNEL_INIT_MAP.activate();
 }

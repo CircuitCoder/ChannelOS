@@ -3,7 +3,7 @@ use core::ops::{Range, RangeBounds};
 use alloc::{collections::BTreeMap, vec::Vec};
 use elf_rs::ElfFile;
 
-use crate::consts::PHYS_MEMORY_END;
+use crate::{consts::PHYS_MEMORY_END, process::UserCaps};
 
 use super::{
     addr::{PhysPageNum, VirtAddr, VirtPageNum},
@@ -108,7 +108,7 @@ impl MemorySet {
         );
     }
 
-    pub fn new_kernel() -> Self {
+    pub fn new_kernel(caps: UserCaps) -> Self {
         let mut memory_set = Self::new_bare();
         // map trampoline
         // memory_set.map_trampoline();
@@ -181,12 +181,16 @@ impl MemorySet {
         );
 
         crate::mprintln!("Mapping serial port");
+        let mut serial_perm = MapPermission::R | MapPermission::W;
+        if caps.serial {
+            serial_perm |= MapPermission::U;
+        }
         memory_set.push(
             MapArea::new(
                 0x10000000.into(),
                 0x10001000.into(),
                 MapTarget::Identical,
-                MapPermission::R | MapPermission::W,
+                serial_perm,
             ),
             None,
         );
@@ -198,6 +202,9 @@ impl MemorySet {
         crate::mprintln!("Activating page table at {:#x}000", self.table.ppn().0);
         unsafe {
             use riscv::register::satp;
+            satp::set(satp::Mode::Bare, 0, 0);
+            riscv::asm::sfence_vma_all();
+
             satp::set(satp::Mode::Sv39, 0, self.table.ppn().into());
             riscv::asm::sfence_vma_all();
             crate::mprintln!("SFENCE.VMA completed");

@@ -1,10 +1,11 @@
-use crate::sbi::set_timer;
+use crate::{sbi::set_timer, trap::TrapFrame};
 use riscv::register::{sie, time};
 
 pub static mut TICKS: usize = 0;
 
 // TODO: Allow changing TIMEBASE
 static TIMEBASE: usize = 10_000_000;
+static SLICE: usize = TIMEBASE / 100;
 pub fn init() {
     unsafe {
         TICKS = 0;
@@ -15,7 +16,7 @@ pub fn init() {
 
 // TODO: Remove me
 pub fn rearm() {
-    let next = rtc() + TIMEBASE;
+    let next = rtc() + SLICE;
     set_timer(next);
 }
 
@@ -27,9 +28,9 @@ pub fn now() -> usize {
     rtc() / TIMEBASE
 }
 
-pub fn trigger() {
+pub fn tick(tf: &mut TrapFrame) {
     crate::mprintln!("Timer triggered at {} ({})", now(), rtc());
     rearm();
 
-    // TODO: dispatch to scheduler
+    crate::sched::tick(tf, true);
 }

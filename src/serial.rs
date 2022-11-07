@@ -1,6 +1,3 @@
-use core::hint;
-use core::sync::atomic::*;
-
 pub struct UART16550 {
     base: usize,
     shift: usize,
@@ -123,9 +120,16 @@ pub fn fprint(args: core::fmt::Arguments) -> core::fmt::Result {
 }
 
 #[macro_export]
-macro_rules! mprint {
+macro_rules! uprint {
     ($($arg:tt)*) => ({
         $crate::serial::fprint(format_args!($($arg)*)).unwrap()
+    });
+}
+
+#[macro_export]
+macro_rules! mprint {
+    ($($arg:tt)*) => ({
+        // $crate::serial::fprint(format_args!($($arg)*)).unwrap()
     });
 }
 

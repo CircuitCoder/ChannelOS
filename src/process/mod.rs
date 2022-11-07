@@ -1,7 +1,7 @@
 use elf_rs::{ElfFile, SectionHeaderFlags, SectionType};
 
 use crate::{
-    consts::{KERNEL_STACK_SIZE, USER_STACK_TOP, VDSO_RESIDE},
+    consts::{PROCESS_STACK_TOP, VDSO_DATA, VDSO_RESIDE},
     elf::Dynamic,
     mem::{
         addr::{PhysAddr, VirtAddr, VirtPageNum},
@@ -9,10 +9,10 @@ use crate::{
     },
     mprintln,
     provided::kernel_meow,
+    provided::putchar_async,
+    provided::putchar_sync,
     trap::TrapFrame,
 };
-
-pub static TEST_PROGRAM: &'static [u8] = include_bytes!("../../user/test.elf");
 
 pub struct Process {
     pub mset: MemorySet,
@@ -20,19 +20,26 @@ pub struct Process {
 }
 
 lazy_static::lazy_static! {
-    static ref EXPORTED_METHODS: [(&'static [u8], usize); 1] = [
+    static ref EXPORTED_METHODS: [(&'static [u8], usize); 2] = [
         (b"kernel_meow", kernel_meow as usize),
+        // (b"putchar", putchar_sync as usize),
+        (b"putchar", putchar_async as usize),
     ];
 }
 
+#[derive(Default, Clone, Copy)]
+pub struct UserCaps {
+    pub serial: bool,
+}
+
 impl Process {
-    pub fn new_user(elf: &[u8]) -> Process {
+    pub fn new_user(elf: &[u8], data: [usize; 2], caps: UserCaps) -> Process {
         let parsed = elf_rs::Elf64::from_bytes(elf).unwrap();
         let header = parsed.elf_header();
 
-        crate::mprintln!("{:?}", header);
+        // crate::mprintln!("{:?}", header);
 
-        let mut mset = MemorySet::new_kernel();
+        let mut mset = MemorySet::new_kernel(caps);
 
         let mut dynamic = None;
 
@@ -72,7 +79,7 @@ impl Process {
             if sec_hdr.flags().contains(SectionHeaderFlags::SHF_EXECINSTR) {
                 perm |= MapPermission::X;
             }
-            mprintln!("Perm: {:?}", perm);
+            // mprintln!("Perm: {:?}", perm);
 
             let area = MapArea::frames(virt_start.into()..virt_end.into(), perm);
             mset.push(area, src);
@@ -93,29 +100,62 @@ impl Process {
         );
         mset.push(text_vdso_area, None);
 
+        // Map vdso data
+        let data_vdso_start_vpn = VirtAddr(VDSO_DATA).floor();
+        let data_vdso_frames = MapArea::frames(
+            data_vdso_start_vpn..VirtPageNum(data_vdso_start_vpn.0 + 1),
+            MapPermission::U | MapPermission::R | MapPermission::W,
+        );
+        mset.push(data_vdso_frames, Some(&[0u8; 0x1000]));
+
         if let Some(dynamic) = &dynamic {
             if let Some(inner) = &dynamic.rel {
                 match &inner {
                     crate::elf::RelTable::RELA(tbl) => {
                         for ent in *tbl {
-                            mprintln!("Offset: {:#x}", ent.offset);
-                            mprintln!("Sym: {:#x}", ent.info >> 32);
-                            mprintln!("Type: {:#x}", ent.info & ((1usize << 32) - 1));
+                            // mprintln!("Offset: {:#x}", ent.offset);
+                            // mprintln!("Sym: {:#x}", ent.info >> 32);
+                            let reloc_type = ent.info & ((1usize << 32) - 1);
+                            // mprintln!("Type: {:#x}", reloc_type);
 
-                            let (sym, name) = dynamic.resolve_sym(ent.info >> 32);
-                            mprintln!("Name: {:?}", name);
-                            mprintln!("Sym: {:?}", sym);
+                            match reloc_type {
+                                0x3 => {
+                                    // Local variable relocation
+                                    let slot_paddr =
+                                        mset.table.translate_addr(ent.offset.into()).unwrap();
+                                    mprintln!(
+                                        "[Linker] Wring RELATIVE: {:#x}, paddr {:#x} <- {:#x}",
+                                        ent.offset,
+                                        slot_paddr.0,
+                                        ent.addend
+                                    );
+                                    unsafe { (slot_paddr.0 as *mut usize).write(ent.addend) };
+                                }
+                                0x5 => {
+                                    let (sym, name) = dynamic.resolve_sym(ent.info >> 32);
+                                    // mprintln!("Name: {:?}", name);
+                                    // mprintln!("Sym: {:?}", sym);
 
-                            for &(target_name, target_at) in EXPORTED_METHODS.iter() {
-                                if target_name == name {
-                                    // Found, fill in GOT
-                                    let target_offset = target_at - _text_vdso_start as usize;
-                                    let target_vaddr = VDSO_RESIDE + target_offset;
-                                    let got_vaddr = ent.offset;
-                                    let got_paddr =
-                                        mset.table.translate_addr(got_vaddr.into()).unwrap();
-                                    mprintln!("Wring to GOT paddr {:#x}", got_paddr.0);
-                                    unsafe { (got_paddr.0 as *mut usize).write(target_vaddr) };
+                                    for &(target_name, target_at) in EXPORTED_METHODS.iter() {
+                                        if target_name == name {
+                                            // Found, fill in GOT
+                                            let target_offset =
+                                                target_at - _text_vdso_start as usize;
+                                            let target_vaddr = VDSO_RESIDE + target_offset;
+                                            let got_vaddr = ent.offset;
+                                            let got_paddr = mset
+                                                .table
+                                                .translate_addr(got_vaddr.into())
+                                                .unwrap();
+                                            mprintln!("[Linker] Wring JUMP_SLOT: GOT vaddr {:#x}, paddr {:#x}", got_vaddr, got_paddr.0);
+                                            unsafe {
+                                                (got_paddr.0 as *mut usize).write(target_vaddr)
+                                            };
+                                        }
+                                    }
+                                }
+                                _ => {
+                                    panic!("Unsupported relocation type {:#x}", reloc_type);
                                 }
                             }
                         }
@@ -130,7 +170,7 @@ impl Process {
         // Allocate user stack
 
         // TODO: extendable stack
-        let stack_end = VirtAddr(USER_STACK_TOP).ceil();
+        let stack_end = VirtAddr(PROCESS_STACK_TOP).ceil();
         let stack_start = VirtPageNum(stack_end.0 - 16usize);
         let stack_area = MapArea::frames(
             stack_start..stack_end,
@@ -140,7 +180,31 @@ impl Process {
 
         let entry = parsed.entry_point() as usize;
         mprintln!("Entry: {:#x}", entry);
-        let tf = TrapFrame::with_process(true, entry, USER_STACK_TOP);
+        let mut tf = TrapFrame::with_process(true, entry, PROCESS_STACK_TOP);
+        tf.x[10] = data[0];
+        tf.x[11] = data[1];
+
+        let process = Process { tf, mset };
+
+        process
+    }
+
+    pub fn new_kernel(entry: usize, data: [usize; 2]) -> Process {
+        let mut mset = MemorySet::new_kernel(Default::default());
+        // Allocate stack
+
+        // TODO: extendable stack
+        let stack_end = VirtAddr(PROCESS_STACK_TOP).ceil();
+        let stack_start = VirtPageNum(stack_end.0 - 16usize);
+        let stack_area =
+            MapArea::frames(stack_start..stack_end, MapPermission::W | MapPermission::R);
+        mset.push(stack_area, None);
+
+        let entry = entry as usize;
+        mprintln!("Entry: {:#x}", entry);
+        let mut tf = TrapFrame::with_process(false, entry, PROCESS_STACK_TOP);
+        tf.x[10] = data[0];
+        tf.x[11] = data[1];
 
         let process = Process { tf, mset };
 

@@ -6,6 +6,7 @@ pub const PHYS_MEMORY_END: usize = 0x8800_0000;
 pub const PAGE_SIZE: usize = 4096;
 
 // For processes
-pub const USER_STACK_TOP: usize = 0x80000000;
+pub const PROCESS_STACK_TOP: usize = 0x80000000;
 
 pub const VDSO_RESIDE: usize = 0x60000000;
+pub const VDSO_DATA: usize = 0x62000000;

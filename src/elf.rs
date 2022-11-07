@@ -1,4 +1,4 @@
-use alloc::collections::BTreeMap;
+use alloc::{collections::BTreeMap, vec::Vec};
 use core::ops::Range;
 use enum_repr::EnumRepr;
 
@@ -51,7 +51,8 @@ pub struct Dynamic<'a> {
     pub dynstr: Option<&'a [u8]>,
 }
 
-#[repr(C)]
+#[repr(C, align(8))]
+#[derive(Debug)]
 struct DynEnt {
     tag: isize,
     val: usize,
@@ -59,13 +60,14 @@ struct DynEnt {
 
 impl<'a> Dynamic<'a> {
     pub fn parse(elf: &'a [u8], dynamic: Range<usize>) -> Self {
+        mprintln!("[Linker] dynamic at {} -> {}", dynamic.start, dynamic.end);
         let (_, dynamic_region, _) = unsafe { elf[dynamic].align_to::<DynEnt>() };
         let collected: BTreeMap<DynTag, usize> = dynamic_region
             .iter()
             .take_while(|e| e.tag != 0)
             .filter_map(|e| DynTag::from_repr(e.tag).map(|tag| (tag, e.val)))
             .collect();
-        mprintln!("{:#?}", collected);
+        mprintln!("[Linker] dynamic: {:#?}", collected);
 
         let mut result = Self {
             rel: None,

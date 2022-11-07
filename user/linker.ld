@@ -69,4 +69,9 @@ SECTIONS
   .got : {
     *(.got .got.*)
   }
+
+  . = ALIGN(0x1000);
+  .interp : {
+    *(.interp .interp.*)
+  }
 }

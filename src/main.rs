@@ -16,6 +16,8 @@ mod sched;
 mod serial;
 mod timer;
 mod trap;
+mod prog;
+mod service;
 
 #[link_section = ".data"]
 #[no_mangle]
@@ -31,14 +33,15 @@ extern "C" {
 #[no_mangle]
 fn boot(hartid: usize, fdt_addr: usize) {
     serial::early_serial_init();
-    serial::sbi_print("Test SBI\n");
-    mprintln!("Hello world!");
+    serial::sbi_print("Early print initialized\n");
 
     trap::init();
     mem::init();
     timer::init();
 
-    let init = process::Process::new_user(process::TEST_PROGRAM);
+    let init = process::Process::new_user(prog::TEST, [0, 0], Default::default());
+    sched::push(init);
+
     // Make sure nothing is on stack
-    sched::bootstrap(init);
+    sched::bootstrap();
 }
