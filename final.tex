@@ -1,0 +1,78 @@
+\documentclass[UTF-8]{ctexbeamer}
+\usetheme{Copenhagen}
+\usecolortheme{seahorse}
+
+\usepackage{multimedia}
+\usepackage{listings}
+\usepackage{minted}
+\usepackage{tikz}
+\usepackage{textcomp}
+\usepackage[normalem]{ulem}
+\title{动态内核模块放置}
+
+\author{刘晓义}
+\date{2022.11.10}
+
+\begin{document}
+
+\part{Intro}
+
+\begin{frame}
+  \titlepage
+  \begin{center}
+    \includegraphics[width=.1\textwidth]{assets/float.png}
+  \end{center}
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{回顾}
+
+  能不能在运行时决定内核提供的一个服务运行在哪里，并且
+
+  \begin{itemize}
+    \item 有足够好的性能
+    \item 无需更改用户程序
+  \end{itemize}
+
+  \vspace*{3em}
+  \url{https://github.com/CircuitCoder/ChannelOS}
+\end{frame}
+
+\begin{frame}
+  \frametitle{做出来的饼}
+
+  \begin{itemize}
+    \item 异步通讯协议
+    \item ABI / API
+    \item Dynamic linker / vDSO 框架
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{没做出来的饼}
+
+  \begin{itemize}
+    \item SMP
+    \item Codegen
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \frametitle{计划外的事情}
+
+  vDSO 框架抽取成单独的模块
+
+  \url{https://github.com/CircuitCoder/kernel_prelink}
+\end{frame}
+
+\begin{frame}
+  \frametitle{如果后续继续做的话}
+
+  \begin{itemize}
+    \item 把 SMP 支持调通
+    \item 实现一个网络栈
+    \item 硬件上性能测试
+  \end{itemize}
+\end{frame}
+
+\end{document}
